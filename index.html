@@ -1,0 +1,49 @@
+<!DOCTYPE HTML>
+<html lang="en">
+    <head>
+        <title>Chess Game</title>
+
+        <!-- linking to google fonts -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+        <link rel="stylesheet" href="styles.css">
+    </head>
+
+    <body>
+        <div id="mouse-tracker">
+            <img id="mouse-tracker-img" src="null"/>
+        </div>
+        <div class="vertical-align">
+        <section class="game-container">
+
+            <div id="board">
+            </div>
+
+            <div class="ui">
+                <div class="upper">
+                    <ul> <!--listing all moves in the current game-->
+                        <li>Knight G5&#38; &amp;</li>
+                        <li>Queen A2</li>
+                        <li>Pawn G5</li>
+                        <li>King C2</li>
+                        <li>Pawn C3</li>
+                    </ul>
+                </div>
+                <div class="lower">
+                    <div class="buttons">
+                        <button onclick="resetBoard()">Restart</button>
+                        <button>Resign</button>
+                    </div>
+                    <div class="signal-wrapper">
+                        <div id="signal" team="white"> <!--telling users who has the next move-->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        </div>
+    </body>
+    <script src="script.js"></script>
+</html>
