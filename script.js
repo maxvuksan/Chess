@@ -51,7 +51,8 @@ const moveProfiles = {
         //free moves can both take and move to empty spaces
         freeMoves : [],
         //moves which can only be applied to the first move
-        firstMoves : [new Vec(0, 2)],
+        firstMoves : [new Vec(0, 1)],
+        firstMoveStepCount : 2,
     },
     "knight": {
         limitedMoves : true,
@@ -106,10 +107,23 @@ var selected = {
     originalPosition : new Vec(0,0),
     hoveredPosition : new Vec(0,0),
 };
+
+var popupPresent = false;
+
 /*
     whos turn is it?
 */
 var currentTeam = "white";
+var kings = {
+    "white" : {
+        position : new Vec(0,0),
+        threats : null,
+    },
+    "black" : {
+        position : new Vec(0,0),
+        threats : null,
+    }
+}
 
 var cells = [];
 
@@ -121,6 +135,10 @@ var mouseTrackerImg = document.getElementById("mouse-tracker-img"); //child of m
 var board = document.getElementById("board");
 var teamSignal = document.getElementById("signal");
 var body = document.getElementsByTagName("body")[0];
+/*
+    when a popup is present the screen is faded
+*/
+var screenFader = document.getElementById('screen-fader');
 
 board.addEventListener('mousemove', function(event){
     floatingPieceMouseOverCallback(event);
@@ -159,6 +177,45 @@ function getImageHTML(imageSrc){
     return newImage;
 }
 
+function promotePawn(x, y, piece, team){
+    cells[y][x].innerHTML = "";
+    setPiece(x, y, piece, team);
+    popupPresent = false;
+    screenFader.setAttribute("active", "false");
+
+    switchTeams();
+}
+
+function getPawnPromotionPopupHTML(x, y){
+
+    let popupWrapper = document.createElement('div');
+    popupWrapper.className = "popup-wrapper"
+    let popup = document.createElement('div');
+    popupWrapper.appendChild(popup);
+    popup.className = "popup";
+
+    let imgSources = blackPieces;
+    popup.setAttribute("invert", 'true');
+    if(currentTeam == "white"){
+        imgSources = whitePieces;
+        popup.setAttribute("invert", 'false');
+    }
+
+    let pieces = ["queen", "rook", "knight", "bishop"];
+    for(let i = 0; i < 4; i++){
+        let pieceButton = document.createElement('img');
+        pieceButton.setAttribute("piece", pieces[i]);
+        pieceButton.src = imgSources[pieces[i]]
+        pieceButton.addEventListener("click", ()=>{
+            promotePawn(x, y, pieces[i], currentTeam);
+        });
+        popup.appendChild(pieceButton);
+    }
+    
+
+    return popupWrapper;
+}
+
 function getPiece(x, y){
     return cells[y][x].getAttribute("piece");
 }
@@ -177,6 +234,12 @@ function setPiece(x, y, piece, team, hasMoved = true){
         cells[y][x].appendChild(getImageHTML(blackPieces[piece]));
     }
     cells[y][x].setAttribute("team", team);
+}
+function isEmpty(x, y){
+    if(cells[y][x].getAttribute("piece") == "null"){
+        return true;
+    }
+    return false;
 }
 
 function removePiece(x, y){
@@ -255,9 +318,70 @@ function isInBounds(x, y){
 }
 
 
-function validMove(x, y, move, team, canMoveEmpty, canTake, limited = true){
+/*
+    iterates over every piece to determine if it is posing a threat to the king
+*/
+function determineIfInCheck(){
+
+    kings[currentTeam].threats = [];
+
+    for(let x = 0; x < 8; x++){
+        for(let y = 0; y < 8; y++){
+
+            if(!isEmpty(x, y)){
+
+                if(getTeam(x, y) == currentTeam){
+
+                    let otherTeam = "white";
+                    if(currentTeam == "white"){
+                        otherTeam = "black";
+                    }
+
+                    let evalObject = startEvaluateBoard(x, y, getPiece(x, y), currentTeam);
+
+                    //note: limited moves only considers moves which can attack
+                    evalObject.limitedMoves.forEach(pos =>{
+                        //we have a check
+                        if(pos.x == kings[otherTeam].position.x & pos.y == kings[otherTeam].position.y){
+                            kings[currentTeam].threats.push({
+                                //can be taken to resolve check
+                                source : new Vec(evalObject.xInital, evalObject.yInital),
+                                blockingPositions : [],
+                            })
+                        }
+                    });
+                    //note: streamed positions are blockable
+                    evalObject.streamedMoves.forEach(moveStream =>{
+
+                        for(let p = 0; p < moveStream.length; p++){
+                            //check
+                            if(moveStream[p].x == kings[otherTeam].position.x & moveStream[p].y == kings[otherTeam].position.y){
+                                kings[currentTeam].threats.push({
+                                    //can be taken to resolve check
+                                    source : new Vec(evalObject.xInital, evalObject.yInital),
+                                    blockingPositions : moveStream,
+                                })
+                                break;
+                            }
+                        }
+                    });
+
+                }
+
+                endEvaluateBoard();
+            }
+
+        }
+    }
+    if(kings[currentTeam].threats.length == 0){
+        return false; //free of check
+    }
+
+    return true; //in check
+}
+
+function validMove(x, y, move, team, canMoveEmpty, canTake, limited = true, stepCount=1){
     
-    let moveStep = 1;
     /*
         the move step is the amount of steps a move will 
         carry out in the given direction,
@@ -265,11 +389,13 @@ function validMove(x, y, move, team, canMoveEmpty, canTake, limited = true){
         (meaning we need a moveStep of 8)
     */
     if(!limited){
-        moveStep = 8;
+        stepCount = 8;
     }
-    let newX = x;
-    let newY = y;
-    for(let i = 0; i < moveStep; i++){
+    var newX = x;
+    var newY = y;
+    
+    var moveStream = [];
+    for(let i = 0; i < stepCount; i++){
 
         let stopStepping = false;
 
@@ -301,6 +427,7 @@ function validMove(x, y, move, team, canMoveEmpty, canTake, limited = true){
     
             if(moveIsValid){
                 cells[newY][newX].setAttribute("valid", "true");
+                moveStream.push(new Vec(newX, newY));
             }
         }
 
@@ -312,15 +439,18 @@ function validMove(x, y, move, team, canMoveEmpty, canTake, limited = true){
             break;
         }
     }
+    return moveStream;
 }
 
 function startEvaluateBoard(x, y, piece, team){
+
     var profile = moveProfiles[piece];
     /*
         for pre defined moves (limitedMove pieces)
     */
+    var _limitedMoves = [];
+    var _streamedMoves = [];
     if(profile.limitedMoves){
-
         /*
             iterating over harmless moves (moves which can not take pieces)
         */
@@ -329,38 +459,93 @@ function startEvaluateBoard(x, y, piece, team){
             validMove(x, y, profile.moves[m], team, true, false);
         }
 
-        if(cells[y][x].getAttribute("hasMoved") == "false"){
-
-            for(let m = 0; m < profile.firstMoves.length; m++){
-                validMove(x, y, profile.firstMoves[m], team, true, false);
-            }
-        }
-
         for(let m = 0; m < profile.attackingMoves.length; m++){
 
-            validMove(x, y, profile.attackingMoves[m], team, false, true);
+            let stream = validMove(x, y, profile.attackingMoves[m], team, false, true);
+            if(stream.length > 0){
+                _limitedMoves.push( stream[0] );
+            }
         }
 
         for(let m = 0; m < profile.freeMoves.length; m++){
 
-            validMove(x, y, profile.freeMoves[m], team, true, true);
+            let stream = validMove(x, y, profile.freeMoves[m], team, true, true);
+            if(stream.length > 0){
+                _limitedMoves.push( stream[0] );
+            }
         }
 
     }
     else{ //moves contiune in the specifed vector direction
-       
         for(let m = 0; m < profile.freeMoves.length; m++){
 
-            validMove(x, y, profile.freeMoves[m], team, true, true, false);
+            _streamedMoves.push( validMove(x, y, profile.freeMoves[m], team, true, true, false) );
+            
         }
     }
 
+    if(cells[y][x].getAttribute("hasMoved") == "false"){
+
+        for(let m = 0; m < profile.firstMoves.length; m++){
+
+            validMove(x, y, profile.firstMoves[m], team, true, false, true, profile.firstMoveStepCount);
+        }
+    }
+
+    //collecting this pieces valid moves, used to determine if king is in check
+    return {xInital : x, yInital : y, limitedMoves : _limitedMoves, streamedMoves : _streamedMoves};
+
 }
 
+function fetchValidPositions(){
+    let validArray = [];
+    /*
+        finds and returns all valid moves currently visable on the board
+    */
+    for(let x = 0; x < 8; x++){
+        for(let y = 0; y < 8; y++){
+            if(cells[y][x].getAttribute("valid") == "true"){
+                validArray.push(new Vec(x, y));
+            }
+        }
+    } 
+    return validArray;
+}
+
+
 function endEvaluateBoard(){
+    /*
+        resets all cells valid states
+    */
     for(let x = 0; x < 8; x++){
         for(let y = 0; y < 8; y++){
             cells[y][x].setAttribute("valid", "false");
+        }
+    }
+}
+
+function evaluatePawnPromotion(piece, x, y){
+    if(piece == "pawn"){
+        /*
+            this only applies to pawns 
+        */
+        let canPromote = false;
+        if(currentTeam == "white"){
+            if(y == 0){
+                canPromote = true;
+            }
+        }
+        //black 
+        else if(y == 7){
+            canPromote = true;
+        }
+
+        if(canPromote){
+            screenFader.setAttribute("active", "true");
+            removePiece(x, y);
+            cells[y][x].appendChild(getPawnPromotionPopupHTML(x, y));
+
+            popupPresent = true;
         }
     }
 }
@@ -385,13 +570,14 @@ function cellPlace(){
         mouseTrackerImg.setAttribute("src", "null");
         endEvaluateBoard();
         setPiece(posX, posY, selected.piece, currentTeam, cells[posY][posX].getAttribute("hasMoved"));
-        selected.piece = null;
-        selected.team = null;
 
         if(success){
             //our move is a success
-            submitMove();
+            submitMove(selected.piece, posX, posY);
         }
+
+        selected.piece = null;
+        selected.team = null;
     }
 }
 function cellPickup(x, y){
@@ -426,7 +612,25 @@ function cellPickup(x, y){
     }
 }
 
-function submitMove(){
+function submitMove(piece, x, y){
+
+    if(determineIfInCheck()){
+        console.log("Checked by " + currentTeam)
+    }
+
+    if(piece == "king"){
+        kings[currentTeam].position.x = x;
+        kings[currentTeam].position.y = y;
+    }
+
+    evaluatePawnPromotion(piece, x, y, currentTeam);
+
+    if(!popupPresent){
+        switchTeams();
+    }
+}
+
+function switchTeams(){
     if(currentTeam == "white"){
         currentTeam = "black";
     }
@@ -436,9 +640,8 @@ function submitMove(){
     teamSignal.setAttribute("team", currentTeam);
 }
 
-
-
 function clearBoard(){
+    screenFader.setAttribute("active", "false");
     for(let y = 0; y < 8; y++){
         for(let x = 0; x < 8; x++){
             removePiece(x, y);
@@ -460,8 +663,10 @@ function placeStartingPieces(){
     setPiece(0, 7, "rook", "white", false);
     setPiece(1, 7, "knight", "white", false);
     setPiece(2, 7, "bishop", "white", false);
-    setPiece(3, 7, "king", "white", false);
-    setPiece(4, 7, "queen", "white", false);
+    setPiece(3, 7, "queen", "white", false);
+    setPiece(4, 7, "king", "white", false);
+    kings["white"].position.x = 4;
+    kings["white"].position.y = 7;
     setPiece(5, 7, "bishop", "white", false);
     setPiece(6, 7, "knight", "white", false);
     setPiece(7, 7, "rook", "white", false);
@@ -473,12 +678,16 @@ function placeStartingPieces(){
     setPiece(0, 0, "rook", "black", false);
     setPiece(1, 0, "knight", "black", false);
     setPiece(2, 0, "bishop", "black", false);
-    setPiece(3, 0, "king", "black", false);
-    setPiece(4, 0, "queen", "black", false);
+    setPiece(3, 0, "queen", "black", false);
+    setPiece(4, 0, "king", "black", false);
+    kings["black"].position.x = 4;
+    kings["black"].position.y = 0;
     setPiece(5, 0, "bishop", "black", false);
     setPiece(6, 0, "knight", "black", false);
     setPiece(7, 0, "rook", "black", false);
+    
 }
 
 createBoard();
 placeStartingPieces();
+

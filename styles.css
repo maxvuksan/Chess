@@ -1,10 +1,24 @@
+.div{
+    width: 96px;
+    height: 46px;
+    padding: 50px;
+    margin: 50px;
+    border: 2px solid blue;
+    background-color: CornflowerBlue;
+}
+
+
 
 *{
     --small-space: 1em;
     --space: 2em;    
     --border-radius: 0.1em;
+    --border-radius-large: 1em;
 
     --colour-panel: rgb(67, 66, 74);
+
+    --dark-square-colour: #adb999;
+    --light-square-colour: #e3e3da;
 
     font-family: 'Inter', sans-serif;
     color: white;
@@ -40,6 +54,7 @@ img{
 
 
 #board{
+    position:initial;
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     grid-auto-flow: row;
@@ -65,14 +80,13 @@ img{
     cursor: grab;
 }
 .cell[colour="white"]{
-    background-color: #e3e3da;
+    background-color: var(--light-square-colour);
 }
 .cell[colour="black"]{
-    background-color:#adb999;
+    background-color: var(--dark-square-colour);
 }
 .cell[hovered="true"]{
-    box-shadow: 
-                inset 0 0 0 0.3em rgba(255,255,255);
+    box-shadow: inset 0 0 0 0.3em rgba(255,255,255);
 }
 .cell[colour="black"][valid="true"]{
     background-color:burlywood;
@@ -88,10 +102,10 @@ img{
     pointer-events: none;
     position: fixed;
     top: 0;
+    z-index: 1;
 }
 #mouse-tracker img{
     width: 5em;
-    height: 5em;
     transform: translate(-2.5em, -2.5em);
     aspect-ratio: 1/1;
 }
@@ -129,9 +143,10 @@ ul{
     gap: 0.5em;
 }
 button{
-    border: none;
+    border: 2px solid white;
+    background-color: transparent;
     padding: var(--small-space);
-    border-radius: var(--border-radius);
+    border-radius: var(--border-radius-large);
 }
 button:hover{
     cursor: pointer;
@@ -154,4 +169,46 @@ button:hover{
 }
 #signal[team="white"]{
     background-color: white;
+}
+
+#screen-fader{  
+    width: 100%;
+    height: 100%;
+    position: fixed;
+    z-index: 0.5;
+}
+#screen-fader[active="true"]{
+    background-color: rgba(5,5,7, 0.5);
+}
+#screen-fader[active="false"]{
+    pointer-events: none;
+}
+
+.popup{
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    background-color:var(--dark-square-colour);
+    border-radius: var(--border-radius);
+    transform: translateX(width);
+}
+.popup img{
+    width: 8vw;
+    height: 8vw;
+    max-width: 5em;
+    max-height: 5em;
+    aspect-ratio: 1/1;
+    transition: 0.1s;
+}
+.popup-wrapper{
+    position: relative;
+}
+.popup[invert="true"]{
+    bottom: 0;
+    transform: translateY(25%);
+}
+.popup img:hover{
+    box-shadow: inset 0 0 0 0.3em rgba(255,255,255);
+    background-color: var(--light-square-colour);
+    cursor: pointer;
 }
